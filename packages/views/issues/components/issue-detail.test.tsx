@@ -348,13 +348,36 @@ function createTestQueryClient() {
   });
 }
 
-function renderIssueDetail(issueId = "issue-1") {
+function renderIssueDetail(
+  issueId = "issue-1",
+  props: Partial<Omit<Parameters<typeof IssueDetail>[0], "issueId">> = {},
+) {
   const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <IssueDetail issueId={issueId} />
+      <IssueDetail issueId={issueId} {...props} />
     </QueryClientProvider>,
   );
+}
+
+function installScrollMocks() {
+  const scrollIntoView = vi.fn();
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  const originalRequestAnimationFrame = window.requestAnimationFrame;
+
+  Element.prototype.scrollIntoView = scrollIntoView;
+  window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    callback(0);
+    return 0;
+  }) as typeof window.requestAnimationFrame;
+
+  return {
+    scrollIntoView,
+    restore: () => {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -483,6 +506,43 @@ describe("IssueDetail (shared)", () => {
     });
 
     expect(screen.getByText("I can help with this")).toBeInTheDocument();
+  });
+
+  it("smooth-scrolls to a highlighted comment by default", async () => {
+    const { scrollIntoView, restore } = installScrollMocks();
+
+    try {
+      renderIssueDetail("issue-1", { highlightCommentId: "comment-2" });
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("uses the configured behavior when scrolling to a highlighted comment", async () => {
+    const { scrollIntoView, restore } = installScrollMocks();
+
+    try {
+      renderIssueDetail("issue-1", {
+        highlightCommentId: "comment-2",
+        highlightCommentScrollBehavior: "instant",
+      });
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          behavior: "instant",
+          block: "center",
+        });
+      });
+    } finally {
+      restore();
+    }
   });
 
   it("sends empty description when editor is cleared", async () => {

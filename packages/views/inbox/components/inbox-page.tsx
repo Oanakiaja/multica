@@ -50,6 +50,11 @@ import { PageHeader } from "../../layout/page-header";
 import { InboxListItem, timeAgo } from "./inbox-list-item";
 import { typeLabels } from "./inbox-detail-label";
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest("input, textarea, select, [contenteditable], [role='textbox']") !== null;
+}
+
 export function InboxPage() {
   const { searchParams, replace } = useNavigation();
   const urlIssue = searchParams.get("issue") ?? "";
@@ -130,9 +135,28 @@ export function InboxPage() {
     });
   }, [selectedId, selectedRead, markReadMutate]);
 
-  const handleSelect = (item: InboxItem) => {
+  const handleSelect = useCallback((item: InboxItem) => {
     setSelectedKey(item.issue_id ?? item.id);
-  };
+  }, [setSelectedKey]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (isEditableTarget(event.target)) return;
+
+      const index = Number(event.key) - 1;
+      if (!Number.isInteger(index) || index < 0 || index > 8) return;
+
+      const item = items[index];
+      if (!item) return;
+
+      event.preventDefault();
+      handleSelect(item);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSelect, items]);
 
   const handleArchive = (id: string) => {
     const archived = items.find((i) => i.id === id);
@@ -248,6 +272,7 @@ export function InboxPage() {
       defaultSidebarOpen={false}
       layoutId="multica_inbox_issue_detail_layout"
       highlightCommentId={selected.details?.comment_id ?? undefined}
+      highlightCommentScrollBehavior="instant"
       onDelete={() => {
         // Issue deletion CASCADE-deletes the inbox item server-side, and the
         // issue:deleted WS event prunes it from the inbox cache. Just clear
