@@ -180,13 +180,17 @@ export function InboxPage() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleSelect, items]);
 
-  const handleArchive = (id: string) => {
-    const archived = items.find((i) => i.id === id);
-    if (archived && (archived.issue_id ?? archived.id) === selectedKey) setSelectedKey("");
-    archiveMutation.mutate(id, {
+  const itemKeyById = useMemo(
+    () => new Map(items.map((item) => [item.id, item.issue_id ?? item.id])),
+    [items],
+  );
+  const archiveMutate = archiveMutation.mutate;
+  const handleArchive = useCallback((id: string) => {
+    if (itemKeyById.get(id) === selectedKey) setSelectedKey("");
+    archiveMutate(id, {
       onError: () => toast.error("Failed to archive"),
     });
-  };
+  }, [archiveMutate, itemKeyById, selectedKey, setSelectedKey]);
 
   // Batch operations
   const handleMarkAllRead = () => {
@@ -276,8 +280,8 @@ export function InboxPage() {
           key={item.id}
           item={item}
           isSelected={(item.issue_id ?? item.id) === selectedKey}
-          onClick={() => handleSelect(item)}
-          onArchive={() => handleArchive(item.id)}
+          onSelect={handleSelect}
+          onArchive={handleArchive}
         />
       ))}
     </div>
