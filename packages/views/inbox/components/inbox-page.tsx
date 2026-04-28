@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspaceId } from "@multica/core/hooks";
@@ -64,6 +64,8 @@ export function InboxPage() {
   const wsPaths = useWorkspacePaths();
 
   const [selectedKey, setSelectedKeyState] = useState(() => urlIssue);
+  const deferredSelectedKey = useDeferredValue(selectedKey);
+  const replaceFrameRef = useRef<number | null>(null);
 
   // Sync from URL when searchParams change (e.g. navigation)
   useEffect(() => {
@@ -75,6 +77,9 @@ export function InboxPage() {
   const items = useMemo(() => deduplicateInboxItems(rawItems), [rawItems]);
 
   const selected = items.find((i) => (i.issue_id ?? i.id) === selectedKey) ?? null;
+  const deferredSelected =
+    items.find((i) => (i.issue_id ?? i.id) === deferredSelectedKey) ?? null;
+  const detailSelected = selectedKey ? (deferredSelected ?? selected) : null;
 
   // Track the last key we actually resolved against the inbox list. Lets the
   // fallback effect distinguish "shared-link to a notification not in our
@@ -89,8 +94,22 @@ export function InboxPage() {
     setSelectedKeyState(key);
     const inboxPath = wsPaths.inbox();
     const url = key ? `${inboxPath}?issue=${key}` : inboxPath;
-    replace(url);
+    if (replaceFrameRef.current !== null) {
+      window.cancelAnimationFrame(replaceFrameRef.current);
+    }
+    replaceFrameRef.current = window.requestAnimationFrame(() => {
+      replaceFrameRef.current = null;
+      replace(url);
+    });
   }, [replace, wsPaths]);
+
+  useEffect(() => {
+    return () => {
+      if (replaceFrameRef.current !== null) {
+        window.cancelAnimationFrame(replaceFrameRef.current);
+      }
+    };
+  }, []);
 
   // Shared inbox links (?issue=<id>) may point to notifications not in this
   // user's inbox (archived, or never received). Fall back to the issue page
@@ -264,17 +283,17 @@ export function InboxPage() {
     </div>
   );
 
-  const detailContent = selected?.issue_id ? (
+  const detailContent = detailSelected?.issue_id ? (
     // Key by issue_id (not inbox-item id): a new comment/reaction generates a
     // new inbox notification for the same issue, and the dedup helper picks the
     // newest one — keying on its id would remount IssueDetail on every event,
     // wiping the comment composer draft and resetting scroll position.
     <IssueDetail
-      key={selected.issue_id}
-      issueId={selected.issue_id}
+      key={detailSelected.issue_id}
+      issueId={detailSelected.issue_id}
       defaultSidebarOpen={false}
       layoutId="multica_inbox_issue_detail_layout"
-      highlightCommentId={selected.details?.comment_id ?? undefined}
+      highlightCommentId={detailSelected.details?.comment_id ?? undefined}
       highlightCommentScrollBehavior="instant"
       onDelete={() => {
         // Issue deletion CASCADE-deletes the inbox item server-side, and the
@@ -284,22 +303,22 @@ export function InboxPage() {
         setSelectedKey("");
       }}
     />
-  ) : selected ? (
+  ) : detailSelected ? (
     <div className="p-6">
-      <h2 className="text-lg font-semibold">{selected.title}</h2>
+      <h2 className="text-lg font-semibold">{detailSelected.title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        {typeLabels[selected.type]} · {timeAgo(selected.created_at)}
+        {typeLabels[detailSelected.type]} · {timeAgo(detailSelected.created_at)}
       </p>
-      {selected.body && (
+      {detailSelected.body && (
         <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
-          {selected.body}
+          {detailSelected.body}
         </div>
       )}
       <div className="mt-4">
         <Button
           variant="outline"
           size="sm"
-          onClick={() => handleArchive(selected.id)}
+          onClick={() => handleArchive(detailSelected.id)}
         >
           <Archive className="mr-1.5 h-3.5 w-3.5" />
           Archive
