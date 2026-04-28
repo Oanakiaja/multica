@@ -52,7 +52,10 @@ import { typeLabels } from "./inbox-detail-label";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return target.closest("input, textarea, select, [contenteditable], [role='textbox']") !== null;
+  return (
+    target.closest("input, textarea, select, [contenteditable], [role='textbox']") !==
+    null
+  );
 }
 
 export function InboxPage() {
@@ -154,8 +157,8 @@ export function InboxPage() {
       handleSelect(item);
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleSelect, items]);
 
   const handleArchive = (id: string) => {
